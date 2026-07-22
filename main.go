@@ -3,9 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"github/burovarte/PTROTHB/deque"
+	doublelinkedlist "github/burovarte/PTROTHB/doubleLinkedList"
+	"github/burovarte/PTROTHB/heap"
+	linkedlist "github/burovarte/PTROTHB/linkedList"
+	"github/burovarte/PTROTHB/queue"
 	"github/burovarte/PTROTHB/stack"
 	"os"
-	"strconv"
 	"strings"
 )
 
@@ -14,36 +18,36 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 
-	s := &stack.Stack{}
+	deque := &deque.Deque{}
+	doublelinkedlist := &doublelinkedlist.List{}
+	heap := &heap.Heap{}
+	linkedlist := &linkedlist.List{}
+	queue := &queue.Queue{}
+	stack := &stack.Stack{}
 
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		parts := strings.Fields(line)
 
-
-		switch parts[0]{
-		case "pop":
-			s.Pop()
-		case "peek":
-			s.Peek()
-		case "size":
-			s.Size()
-		case "push":
-			if len(parts) == 2{
-				n, err := strconv.Atoi(parts[1])
-				if err != nil {
-						fmt.Println("Error")
-				}
-
-				s.Push(n)
-			} else {
-				fmt.Println("need number")
-			}
-			case "exit":
-				return
-			default:
-				fmt.Println("try push ..., peek, size, pop or exit")
+		if len(parts) == 0 {
+			continue
 		}
-	}	
+
+		switch parts[0] {
+		case "deque":
+			handleDeque(deque, parts[1:])
+		case "doublelinkedlist":
+			handleDoubleLinkedList(doublelinkedlist, parts[1:])
+		case "heap":
+			handleHeap(heap, parts[1:])
+		case "linkedlist":
+			handleLinkedList(linkedlist, parts[1:])
+		case "queue":
+			handleQueue(queue, parts[1:])
+		case "stack":
+			handleStack(stack, parts[1:])
+
+		}
+	}
 }
