@@ -7,6 +7,7 @@ import (
 	doublelinkedlist "github/burovarte/PTROTHB/doubleLinkedList"
 	"github/burovarte/PTROTHB/heap"
 	linkedlist "github/burovarte/PTROTHB/linkedList"
+	"github/burovarte/PTROTHB/patterns"
 	"github/burovarte/PTROTHB/queue"
 	"github/burovarte/PTROTHB/stack"
 	"os"
@@ -15,6 +16,8 @@ import (
 
 func main() {
 	fmt.Println("Hello, World!")
+
+	patterns.Pipeline()
 
 	scanner := bufio.NewScanner(os.Stdin)
 
