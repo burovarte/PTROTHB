@@ -19,6 +19,12 @@ func main() {
 
 	patterns.Pipeline()
 
+	patterns.MainTimeout()
+
+	patterns.MainOrDone()
+
+	patterns.MainErrGroup()
+
 	scanner := bufio.NewScanner(os.Stdin)
 
 	deque := &deque.Deque{}
