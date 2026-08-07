@@ -25,6 +25,8 @@ func main() {
 
 	patterns.MainErrGroup()
 
+	patterns.MainRateLimiting()
+
 	scanner := bufio.NewScanner(os.Stdin)
 
 	deque := &deque.Deque{}
