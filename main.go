@@ -27,6 +27,10 @@ func main() {
 
 	patterns.MainRateLimiting()
 
+	patterns.MainOrChanel()
+
+	patterns.MainBridge()
+
 	scanner := bufio.NewScanner(os.Stdin)
 
 	deque := &deque.Deque{}

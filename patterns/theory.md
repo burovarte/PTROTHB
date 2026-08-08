@@ -572,3 +572,319 @@ Ticker «раз в секунду» — для **одного** цикла; дл
 Код: `patterns/rateLimiting.go`.
 
 ---
+
+## Or-Channel
+
+Идея: **несколько сигнальных каналов → один**. Выход «срабатывает», когда **готов любой** вход (первый побеждает). Это не поток данных — только «пора выходить / продолжать».
+
+```text
+after(2s) ──► a ──┐
+after(5s) ──► b ──┼──► or(a, b, c) ──► merged ──► main: <-merged
+after(8s) ──► c ──┘         │
+                        close(merged) при первом сигнале
+```
+
+Сигнал обычно через **закрытие** `<-chan struct{}` или receive из done-канала. `ctx.Done()` — тот же тип: `<-chan struct{}`.
+
+### Зачем
+
+Когда источников «стоп» несколько — timeout, ручной cancel, heartbeat, sibling error — плоский `select` на 5–10 каналов не масштабируется. `or(a, b, c…)` **компонует** сигналы в один канал для одного `<-` или одного `select`.
+
+На собесе: «как дождаться **любого** из N событий»; отличие от Or-Done и fan-in (см. ниже).
+
+### Почему `chan struct{}`, а не `bool`
+
+| | `chan struct{}` | shared `bool` |
+| --- | --- | --- |
+| `select` | да, нативно | нет |
+| «Кто первый» | `select` выбирает готовую ветку | нужен mutex / polling |
+| Broadcast | `close(ch)` будит всех ждущих | одна переменная — гонки |
+| Payload | **0 байт** — только факт события | true/false — лишняя семантика |
+
+Done-каналы и `context.Done()` в Go — идиома `struct{}`: **сигнал без данных**.
+
+### `after` — источник сигнала
+
+Вспомогательная функция «через `d` просигналить»:
+
+```text
+after(d):
+  out := make(chan struct{})
+  go func() { <-time.After(d); close(out) }()
+  return out                    ← caller сразу получает канал
+```
+
+`after` **не блокируется** на `d` — ждёт goroutine в фоне. Иначе нельзя передать канал в `or` до истечения таймера.
+
+### Типичный цикл жизни (`or`)
+
+1. `switch len(channels)`: `0` → `nil`; `1` → вернуть канал as-is (без лишней goroutine).
+2. `len >= 2`: `out := make(chan struct{})`, goroutine с **`select`**:
+   - `case <-channels[0]:`
+   - `case <-or(channels[1:]...):` — рекурсия на хвост.
+3. После срабатывания любой ветки — **`close(out)`** (в goroutine, не `defer` при return из `or`).
+4. Сразу `return out` — consumer делает `<-merged`.
+
+```text
+or(a, b, c)
+    └── goroutine: select { <-a | <-or(b,c) } → close(out)
+                              └── or(b,c): select { <-b | <-c }
+```
+
+**Не `for range` по слайсу каналов** — range идёт по элементам **по очереди**, а не «кто первый готов». Для этого только `select`.
+
+### Or-Channel vs Or-Done vs fan-in
+
+| | **Or-Channel** | **Or-Done** | **Fan-In** |
+| --- | --- | --- | --- |
+| Вход | N **сигналов** | данные + **один** `ctx` | N **потоков данных** |
+| Выход | один **сигнал** | поток **тех же** данных | один поток **всех** значений |
+| Вопрос | «кто **первый** из N?» | «пересылать, пока не **cancel**?» | «**собрать** результаты воркеров» |
+| Данные | нет (только «пора») | `int`, `T`, … | `int`, `T`, … |
+
+```text
+OR-CHANNEL                    OR-DONE
+
+  a ──┐                         in: 0,1,2,3...
+  b ──┼──► ONE signal           ctx ──► out: 0,1,2... (копия до cancel)
+  c ──┘    «первый wins»
+```
+
+Or-Done — стадия **pipeline** (read → forward + cancel). Or-Channel — **merge done-источников**, не пересылка бизнес-данных.
+
+### Or-Channel vs один большой `select`
+
+| | `or(a, b, c, …)` | `select { case <-a: case <-b: … }` |
+| --- | --- | --- |
+| Масштаб | рекурсия / композиция | раздувается при N |
+| Переиспользование | функция | копипаста |
+| Смысл | паттерн с именем | то же, но локально |
+
+### Типичные ошибки
+
+- **`defer close(out)` в начале `or`** — канал закрывается при return, consumer получает уже закрытый канал.
+- **`after` без goroutine** или `<-time.After(d)` в теле `after` до `return` — caller не получает канал сразу; `or(after(2s), …)` блокируется последовательно.
+- **`after(2)` без `time.Second`** — 2 **наносекунды**, не секунды.
+- **Печатать канал, не `<-or(...)`** — паттерн не демонстрируется, main не ждёт.
+- **`for range channels`** вместо `select` — не «первый готовый».
+- Путать с **fan-in** — or для **сигналов**, fan-in для **данных**.
+- **`or()` без аргументов** → `nil`; `<-nil` блокирует навечно.
+
+### Утечки goroutine (демо vs прод)
+
+После срабатывания `or` goroutine внутри `after` для «проигравших» таймеров ещё живут до своего `d` — для учебного дemo норм. В проде источники тоже должны уважать общий cancel.
+
+Код: `patterns/orChanel.go`.
+
+---
+
+## Bridge
+
+Идея: **развернуть канал каналов** `<-chan <-chan T` в **один плоский** `<-chan T`. Inner-каналы **приходят динамически** по wire; consumer читает один поток через `for range`.
+
+```text
+producer ──► chanStream (<-chan <-chan int)
+                    │
+                    ├── inner1: 1, 2
+                    ├── inner2: 10, 20   ← по одному, со временем
+                    └── inner3: 100
+                    │
+               bridge(ctx, chanStream)
+                    │
+                    ▼
+                 out ──► consumer: for v := range out
+```
+
+Bridge — **не fan-out** (тот раздаёт один вход многим). Bridge — **сбор в один**, как fan-in, но источники **не известны заранее**.
+
+### Зачем
+
+Fan-in требует **фиксированный** набор: `fanIn(ch1, ch2, ch3)`. Bridge — когда каналы **появляются по ходу**: воркер закончил → прислал `<-chan Result` в общий `chanStream`; подписки подключаются runtime. Consumer не меняется — один `for range out`.
+
+На собесе реже fan-in, но полезно: «чем `<-chan <-chan T` отличается от слайса каналов».
+
+### Роли: producer, bridge, consumer
+
+| Роль | Функция | Что делает |
+| ---- | ------- | ---------- |
+| **Producer** | `chanProducer` | создаёт inner, шлёт в `chanStream`, **`defer close(chanStream)`** |
+| **Bridge** | `bridge` | `for { inner := <-chanStream; range inner → out }` |
+| **Consumer** | `MainBridge` | `for v := range bridge(...)` — читает плоский поток |
+
+Producer и bridge **сразу return** свой `out`; работа — в goroutine (как generator).
+
+### Типичный цикл жизни (`chanProducer`)
+
+1. `out := make(chan (<-chan int))`, `go func() { defer close(out); … }()`, `return out`.
+2. Для каждой «партии»: пауза / `select` с `ctx`; создать **буферизованный** inner; fill + `close(inner)`; `out <- inner` (с `select` + `ctx`).
+3. После всех партий goroutine выходит → **`close(chanStream)`** через defer.
+
+Inner заполняют **до** `out <- inner` — иначе deadlock на небуферизованном send без reader.
+
+### Типичный цикл жизни (`bridge`)
+
+1. `out := make(chan int)`, goroutine, `defer close(out)`.
+2. **`for { select { … } }`** — не один `select` на весь паттерн.
+3. `inner, ok := <-chanStream`: **`!ok`** → producer закрыл stream → `return` (bridge закроет `out`).
+4. `for el := range inner` — все значения inner в `out`.
+5. Send с отменой: `select { case out <- el: case <-ctx.Done(): return }`.
+6. Внешний `case <-ctx.Done()` — выход по cancel.
+
+```text
+for {
+  select {
+  case inner, ok := <-chanStream:
+    if !ok { return }
+    for el := range inner { out <- el (с ctx) }
+  case <-ctx.Done():
+    return
+  }
+}
+```
+
+### Как bridge узнаёт, что producer закончил
+
+Закрытие `chanStream` — сигнал «inner больше не будет». Чтение **`inner, ok := <-chanStream`**: при закрытом пустом канале **`ok == false`**. Отдельный done-канал не нужен. Без `close(chanStream)` bridge **висит** на receive.
+
+### Bridge vs fan-in vs fan-out
+
+| | **Fan-Out** | **Fan-In** | **Bridge** |
+| --- | --- | --- | --- |
+| Направление | 1 → N | N → 1 | N → 1 (динамически) |
+| Вход | один канал | `fanIn(a, b, c)` | `<-chan <-chan T` |
+| Когда знаешь N | — | при старте | **по ходу** |
+| Вопрос | распараллелить стадию | слить известные источники | развернуть **поток** каналов |
+
+```text
+FAN-OUT:   in ──► W1, W2, W3
+
+FAN-IN:    ch1 ──┐
+           ch2 ──┼──► out
+           ch3 ──┘
+
+BRIDGE:    chanStream ──► bridge ──► out
+              (каналы «приезжают»)
+```
+
+Or-Done / Or-Channel сюда **не подменяют** bridge: они про cancel/сигналы, не про merge динамических **data**-каналов.
+
+### Типичные ошибки
+
+- **`case <-chanStream:` перед `for range`** — первый inner **выбрасывается**.
+- **Один `select` без внешнего `for`** — обработан только **первый** inner, остальные lost.
+- **`inner <- v` на небуферизованном** inner без reader — deadlock до `out <- inner`.
+- **`chanStream` не закрыт** — bridge и consumer не завершаются.
+- **`defer close(out)` bridge при return** до goroutine — consumer получает мёртвый канал.
+- **`out <- el` без `ctx`** — зависание на send при cancel.
+- Путать с **fan-in** — слайс каналов ≠ `<-chan <-chan T`.
+- Путать с **fan-out** — bridge **собирает**, не раздаёт.
+
+Код: `patterns/bridge.go`.
+
+---
+
+## Итоги: что прошли и где код
+
+Ядро (★) с реализацией в `patterns/`:
+
+| Паттерн | Файл | Одна фраза |
+| ------- | ---- | ---------- |
+| Generator | `generator.go` | асинхронный источник значений |
+| Pipeline | `pipeline.go` | стадии `in → out` |
+| Fan-Out | `fan-out.go`, `fan_out_repeat.go` | один канал → много воркеров |
+| Fan-In | `fan-in.go` | N каналов → один (статично) |
+| Worker Pool | `workerPool.go` | N воркеров + очередь задач |
+| Timeout / Deadline | `timeout.go` | не ждать бесконечно |
+| Or-Done | `orDone.go` | данные + cancel на стадии |
+| errgroup | `errgroup.go` | параллель + первая ошибка + cancel |
+| Rate Limiting | `rateLimiting.go` | частота вызовов к dependency |
+| Or-Channel | `orChanel.go` | N done-сигналов → один |
+| Bridge | `bridge.go` | `<-chan <-chan T` → плоский поток |
+
+Из таблицы **без кода** (по желанию позже): Semaphore, Drop, Request–Reply, Tee, Heartbeat, Publish–Subscribe. На собесе чаще спрашивают ★-блок выше.
+
+---
+
+## Как паттерны склеиваются
+
+В сервисе редко один паттерн — обычно **стек**:
+
+```text
+Generator
+    ↓
+Pipeline (parse → transform)
+    ↓
+Fan-Out (N воркеров)  +  Rate Limit на HTTP-клиент
+    ↓
+Fan-In или Bridge (собрать результаты)
+    ↓
+Or-Done / ctx (consumer ушёл — стадии не висят)
+    ↓
+errgroup (batch из нескольких независимых операций на запрос)
+```
+
+**Отмена** проходит сверху вниз: `context` из HTTP-handler → каждая стадия слушает `ctx.Done()` или обёрнута в `orDone`. **Or-Channel** — когда несколько источников «стоп» нужно слить в один `select`.
+
+**Лимиты** — разные оси: worker pool / semaphore — **сколько параллельно**; rate limit — **как часто**; timeout — **сколько ждать одну операцию**.
+
+---
+
+## Шпаргалка: какой паттерн когда
+
+| Задача | Паттерн |
+| ------ | ------- |
+| Лениво производить поток | Generator |
+| Обработка цепочкой стадий | Pipeline |
+| Ускорить одну стадию | Fan-Out |
+| Собрать N известных каналов | Fan-In |
+| Каналы приходят по ходу | Bridge |
+| Много однотипных задач, лимит N | Worker Pool |
+| Не ждать I/O вечно | Timeout / `context` |
+| Стадия pipeline + cancel | Or-Done |
+| N goroutine, одна ошибка отменяет остальных | errgroup |
+| Не долбить API по RPS | Rate Limiting |
+| Любой из N таймеров/done → выход | Or-Channel |
+
+Если два паттерна «похожи» — задай вопрос **про данные или про сигнал**, **статично или динамично**, **частота или параллелизм**.
+
+---
+
+## Общий чеклист (перед «готово»)
+
+Пробегись по любой новой concurrent-фиче:
+
+1. **Context** — долгие операции и ожидания (`Wait`, sleep, I/O) слушают `ctx`; `defer cancel()` там, где создаёшь timeout.
+2. **Закрытие** — канал закрывает **writer**; `for range` завершится; bridge/fan-in закрывают `out` только после всех writers.
+3. **WaitGroup** — только `*sync.WaitGroup`; `Add` до `go`, `Done` внутри goroutine, `Wait` в caller.
+4. **Send + cancel** — в pipeline вложенный `select` на `out <- v` и `<-ctx.Done()`, иначе goroutine зависнет.
+5. **Нет утечек** — каждая goroutine имеет путь выхода: closed chan, `ctx`, или явный shutdown.
+6. **Лимиты** — pool/semaphore на параллелизм; `rate.Limiter` **один** на dependency; не «горутина на каждый запрос без потолка».
+7. **Проверка** — компилируется; поведение совпадает с заданием; под нагрузкой/cancel нет deadlock (смотри типичные ошибки в секциях выше).
+
+---
+
+## Типовые путаницы (сводка)
+
+| Путают | На самом деле |
+| ------ | ------------- |
+| Fan-Out и Fan-In / Bridge | out: 1→N; in: N→1 (bridge — динамический N) |
+| Rate limit и Worker Pool | частота vs параллелизм |
+| Or-Done и Or-Channel | данные+cancel vs merge **сигналов** |
+| Or-Channel и Fan-In | сигнал «первый wins» vs поток **значений** |
+| Bridge и Fan-In | `<-chan <-chan T` vs слайс каналов при старте |
+| `time.After` в case и «функция ждёт» | блокирует **select/receive**, не «останавливает» caller без `<-` |
+| Закрытие chan consumer'ом | закрывает только **producer** |
+
+---
+
+## Что изучать дальше
+
+**В этом репозитории:** опциональные паттерны из таблицы (Semaphore ≈ буферизованный chan; Drop — `select` + `default` на send).
+
+**База:** `theory/11` (context), `theory/12` (goroutines/channels), `theory/13` (`sync`). Tour-конспекты — rule `go-tour-conspects.mdc`.
+
+**Практика:** возьми один реальный сценарий (например «скачать N URL, не больше 5 параллельно и не чаще 10/s, с timeout и первой ошибкой») и набросай стек: errgroup + pool/limit + context — без новых абстракций, только уже пройденные кирпичи.
+
+**На собесе:** уметь нарисовать pipeline, объяснить fan-out/in, `ctx` + orDone, errgroup vs WaitGroup, rate vs pool; Bridge и Or-Channel — плюс, если спросят про динамические источники или merge done.
+
+---
