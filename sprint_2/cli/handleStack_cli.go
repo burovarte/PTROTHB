@@ -1,12 +1,12 @@
-package main
+package cli
 
 import (
 	"fmt"
-	"github/burovarte/PTROTHB/stack"
+	"github/burovarte/PTROTHB/sprint_2/stack"
 	"strconv"
 )
 
-func handleStack(stack *stack.Stack, args []string) {
+func HandleStack(stack *stack.Stack, args []string) {
 	switch args[0] {
 	case "push":
 

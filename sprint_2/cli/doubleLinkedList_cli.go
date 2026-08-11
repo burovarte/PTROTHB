@@ -1,12 +1,12 @@
-package main
+package cli
 
 import (
 	"fmt"
-	doublelinkedlist "github/burovarte/PTROTHB/doubleLinkedList"
+	doublelinkedlist "github/burovarte/PTROTHB/sprint_2/doubleLinkedList"
 	"strconv"
 )
 
-func handleDoubleLinkedList(doubleLinkedList *doublelinkedlist.List, args []string) {
+func HandleDoubleLinkedList(doubleLinkedList *doublelinkedlist.List, args []string) {
 
 	switch args[0] {
 	case "pushFront":

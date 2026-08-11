@@ -1,12 +1,12 @@
-package main
+package cli
 
 import (
 	"fmt"
-	linkedlist "github/burovarte/PTROTHB/linkedList"
+	linkedlist "github/burovarte/PTROTHB/sprint_2/linkedList"
 	"strconv"
 )
 
-func handleLinkedList(list *linkedlist.List, args []string) {
+func HandleLinkedList(list *linkedlist.List, args []string) {
 	switch args[0] {
 	case "pushFront":
 

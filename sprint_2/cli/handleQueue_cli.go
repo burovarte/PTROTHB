@@ -1,8 +1,8 @@
-package main
+package cli
 
-import "github/burovarte/PTROTHB/queue"
+import "github/burovarte/PTROTHB/sprint_2/queue"
 
-func handleQueue(queue *queue.Queue, args []string) {
+func HandleQueue(queue *queue.Queue, args []string) {
 
 	switch args[0] {
 	case "push":

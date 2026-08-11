@@ -1,12 +1,12 @@
-package main
+package cli
 
 import (
 	"fmt"
-	"github/burovarte/PTROTHB/heap"
+	"github/burovarte/PTROTHB/sprint_2/heap"
 	"strconv"
 )
 
-func handleHeap(heap *heap.Heap, args []string) {
+func HandleHeap(heap *heap.Heap, args []string) {
 
 	switch args[0] {
 	case "push":

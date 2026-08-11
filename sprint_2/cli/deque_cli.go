@@ -1,11 +1,12 @@
-package main
+package cli
 
 import (
 	"fmt"
-	"github/burovarte/PTROTHB/deque"
+
+	"github/burovarte/PTROTHB/sprint_2/deque"
 )
 
-func handleDeque(d *deque.Deque, args []string) {
+func HandleDeque(d *deque.Deque, args []string) {
 	if len(args) == 0 {
 		fmt.Println("Need correct command")
 		return
