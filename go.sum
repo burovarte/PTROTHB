@@ -1,3 +1,5 @@
+gitlab.com/slon/shad-go v0.0.0-20231003165454-50b27acb6315 h1:qlUWbSVxLepn9zfbmbQrGeJd9pgKsemQGw3ukrRJHio=
+gitlab.com/slon/shad-go v0.0.0-20231003165454-50b27acb6315/go.mod h1:aNMF04q8+e8icJxCgQAFpfsEoHv09XaGtWl2xBzPJk0=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
 golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/time v0.15.0 h1:bbrp8t3bGUeFOx08pvsMYRTCVSMk89u4tKbNOZbp88U=
