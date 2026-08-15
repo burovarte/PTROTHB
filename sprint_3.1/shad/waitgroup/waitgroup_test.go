@@ -4,7 +4,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"gitlab.com/slon/shad-go/tools/testtool"
+	"github/burovarte/PTROTHB/sprint_3.1/shad/testtool"
 )
 
 func testWaitGroup(t *testing.T, wg1 *WaitGroup, wg2 *WaitGroup) {

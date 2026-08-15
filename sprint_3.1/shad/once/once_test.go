@@ -3,7 +3,7 @@ package once
 import (
 	"testing"
 
-	"gitlab.com/slon/shad-go/tools/testtool"
+	"github/burovarte/PTROTHB/sprint_3.1/shad/testtool"
 )
 
 type one int
