@@ -69,7 +69,17 @@ func (p *Playlist) Play() error {
 		p.current = p.head
 	}
 
-	p.state = statePlaying
+	if p.state == statePlaying {
+		return nil
+	}
+
+	duration := p.current.song.Duration
+
+	if p.state == statePaused && p.remaining > 0 {
+		duration = p.remaining
+	}
+
+	p.startPlaybackLocked(duration)
 
 	return nil
 }
@@ -106,9 +116,23 @@ func (p *Playlist) Pause() error {
 	if p.state != statePlaying {
 		return ErrNotPlaying
 
-	} else {
-		p.state = statePaused
 	}
+
+	if p.cancel != nil {
+		p.cancel()
+	}
+
+	p.cancel = nil
+
+	timePassed := time.Since(p.startedAt)
+
+	p.remaining -= timePassed
+
+	if p.remaining < 0 {
+		p.remaining = 0
+	}
+
+	p.state = statePaused
 
 	return nil
 }
@@ -125,9 +149,15 @@ func (p *Playlist) Next() error {
 		return ErrNoNextSong
 	}
 
+	if p.cancel != nil {
+		p.cancel()
+	}
+
+	p.cancel = nil
+
 	p.current = p.current.next
 
-	p.state = statePlaying
+	p.startPlaybackLocked(p.current.song.Duration)
 
 	return nil
 }
@@ -144,9 +174,60 @@ func (p *Playlist) Prev() error {
 		return ErrNoPrevSong
 	}
 
+	if p.cancel != nil {
+		p.cancel()
+	}
+
+	p.cancel = nil
+
 	p.current = p.current.prev
+
+	p.startPlaybackLocked(p.current.song.Duration)
+
+	return nil
+}
+
+func (p *Playlist) runPlayback(ctx context.Context, duration time.Duration, track *node) {
+	timer := time.NewTimer(duration)
+
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+
+	case <-timer.C:
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		if ctx.Err() != nil || p.current != track {
+			return
+		}
+
+		p.cancel = nil
+		p.remaining = 0
+
+		if p.current.next == nil {
+			p.state = stateStopped
+			return
+		}
+
+		p.current = track.next
+		p.startPlaybackLocked(p.current.song.Duration)
+
+	}
+}
+
+func (p *Playlist) startPlaybackLocked(duration time.Duration) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	p.cancel = cancel
+
+	p.startedAt = time.Now()
+
+	p.remaining = duration
 
 	p.state = statePlaying
 
-	return nil
+	go p.runPlayback(ctx, duration, p.current)
 }
