@@ -1,4 +1,4 @@
-package priklad
+package domain
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 )
 
 func TestPlaylistPlay_EmptyPlaylist(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	err := playlist.Play()
 	if !errors.Is(err, ErrEmptyPlaylist) {
 		t.Fatalf("expected ErrEmptyPlaylist, got %v", err)
@@ -22,7 +22,7 @@ func TestPlaylistPlay_EmptyPlaylist(t *testing.T) {
 }
 
 func TestPlaylistAddSong(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	song1 := Song{Name: "песня 1", Duration: time.Minute}
 	song2 := Song{Name: "песня 2", Duration: 2 * time.Minute}
 	if err := playlist.AddSong(song1); err != nil {
@@ -52,7 +52,7 @@ func TestPlaylistAddSong(t *testing.T) {
 }
 
 func TestPlaylistAddSong_InvalidDuration(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	err := playlist.AddSong(Song{Name: "invalid"})
 	if !errors.Is(err, ErrInvalidSong) {
 		t.Fatalf("expected ErrInvalidSong, got %v", err)
@@ -63,7 +63,7 @@ func TestPlaylistAddSong_InvalidDuration(t *testing.T) {
 }
 
 func TestPlaylistPlay_StartsHead(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	if err := playlist.AddSong(Song{Name: "песня", Duration: time.Minute}); err != nil {
 		t.Fatalf("add song: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestPlaylistPlay_StartsHead(t *testing.T) {
 }
 
 func TestPlaylistPlay_WhilePlayingIsNoOp(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	if err := playlist.AddSong(Song{Name: "песня", Duration: time.Minute}); err != nil {
 		t.Fatalf("add song: %v", err)
 	}
@@ -102,14 +102,14 @@ func TestPlaylistPlay_WhilePlayingIsNoOp(t *testing.T) {
 }
 
 func TestPlaylistPause_NotPlaying(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	if err := playlist.Pause(); !errors.Is(err, ErrNotPlaying) {
 		t.Fatalf("expected ErrNotPlaying, got %v", err)
 	}
 }
 
 func TestPlaylistPauseAndResume(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	duration := 500 * time.Millisecond
 	if err := playlist.AddSong(Song{Name: "песня", Duration: duration}); err != nil {
 		t.Fatalf("add song: %v", err)
@@ -141,7 +141,7 @@ func TestPlaylistPauseAndResume(t *testing.T) {
 }
 
 func TestPlaylistNext(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	first := Song{Name: "первая", Duration: 100 * time.Millisecond}
 	second := Song{Name: "вторая", Duration: time.Second}
 	if err := playlist.AddSong(first); err != nil {
@@ -177,13 +177,13 @@ func TestPlaylistNext(t *testing.T) {
 
 func TestPlaylistNext_Errors(t *testing.T) {
 	t.Run("no current song", func(t *testing.T) {
-		playlist := Playlist{}
+		playlist := Playback{}
 		if err := playlist.Next(); !errors.Is(err, ErrNoCurrentSong) {
 			t.Fatalf("expected ErrNoCurrentSong, got %v", err)
 		}
 	})
 	t.Run("no next song", func(t *testing.T) {
-		playlist := Playlist{}
+		playlist := Playback{}
 		if err := playlist.AddSong(Song{Name: "единственная", Duration: time.Minute}); err != nil {
 			t.Fatalf("add song: %v", err)
 		}
@@ -198,7 +198,7 @@ func TestPlaylistNext_Errors(t *testing.T) {
 }
 
 func TestPlaylistPrev(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	for _, song := range []Song{
 		{Name: "первая", Duration: time.Second},
 		{Name: "вторая", Duration: time.Second},
@@ -226,7 +226,7 @@ func TestPlaylistPrev(t *testing.T) {
 }
 
 func TestPlaylist_AutoAdvanceAndStop(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	for _, name := range []string{"первая", "вторая"} {
 		if err := playlist.AddSong(Song{Name: name, Duration: 20 * time.Millisecond}); err != nil {
 			t.Fatalf("add song: %v", err)
@@ -248,7 +248,7 @@ func TestPlaylist_AutoAdvanceAndStop(t *testing.T) {
 }
 
 func TestPlaylistAddSong_Concurrent(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	const songCount = 100
 	var wg sync.WaitGroup
 	errs := make(chan error, songCount)
@@ -286,7 +286,7 @@ func TestPlaylistAddSong_Concurrent(t *testing.T) {
 }
 
 func TestPlaylistNextPrev_Concurrent(t *testing.T) {
-	playlist := Playlist{}
+	playlist := Playback{}
 	for _, name := range []string{"первая", "вторая", "третья"} {
 		if err := playlist.AddSong(Song{Name: name, Duration: time.Minute}); err != nil {
 			t.Fatalf("add song: %v", err)

@@ -1,36 +1,18 @@
-package priklad
+package domain
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 )
 
 type playbackState int
 
-var ErrEmptyPlaylist = errors.New("playlist is empty")
-
-var ErrNotPlaying = errors.New("playlist is not playing")
-
-var ErrNoCurrentSong = errors.New("has not current")
-
-var ErrNoNextSong = errors.New("no more songs")
-
-var ErrNoPrevSong = errors.New("no prev songs")
-
-var ErrInvalidSong = errors.New("invalid song")
-
 const (
 	stateStopped playbackState = iota
 	statePlaying
 	statePaused
 )
-
-type Song struct {
-	Name     string
-	Duration time.Duration
-}
 
 type node struct {
 	prev *node
@@ -39,6 +21,13 @@ type node struct {
 }
 
 type Playlist struct {
+	ID        int64
+	Name      string
+	UpdatedAt time.Time
+	CreatedAt time.Time
+}
+
+type Playback struct {
 	head      *node
 	current   *node
 	tail      *node
@@ -57,7 +46,7 @@ type Player interface {
 	Prev() error
 }
 
-func (p *Playlist) Play() error {
+func (p *Playback) Play() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -84,7 +73,7 @@ func (p *Playlist) Play() error {
 	return nil
 }
 
-func (p *Playlist) AddSong(song Song) error {
+func (p *Playback) AddSong(song Song) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -109,7 +98,7 @@ func (p *Playlist) AddSong(song Song) error {
 
 }
 
-func (p *Playlist) Pause() error {
+func (p *Playback) Pause() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -137,7 +126,7 @@ func (p *Playlist) Pause() error {
 	return nil
 }
 
-func (p *Playlist) Next() error {
+func (p *Playback) Next() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -162,7 +151,7 @@ func (p *Playlist) Next() error {
 	return nil
 }
 
-func (p *Playlist) Prev() error {
+func (p *Playback) Prev() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -187,7 +176,7 @@ func (p *Playlist) Prev() error {
 	return nil
 }
 
-func (p *Playlist) runPlayback(ctx context.Context, duration time.Duration, track *node) {
+func (p *Playback) runPlayback(ctx context.Context, duration time.Duration, track *node) {
 	timer := time.NewTimer(duration)
 
 	defer timer.Stop()
@@ -217,7 +206,7 @@ func (p *Playlist) runPlayback(ctx context.Context, duration time.Duration, trac
 	}
 }
 
-func (p *Playlist) startPlaybackLocked(duration time.Duration) {
+func (p *Playback) startPlaybackLocked(duration time.Duration) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
