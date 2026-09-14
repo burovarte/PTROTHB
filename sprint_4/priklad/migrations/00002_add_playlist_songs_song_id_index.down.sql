@@ -1,0 +1,1 @@
+DROP INDEX public.idx_playlist_songs_song_id;

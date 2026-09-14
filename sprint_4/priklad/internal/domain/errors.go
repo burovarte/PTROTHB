@@ -18,4 +18,8 @@ var (
 	ErrInvalidID = errors.New("invalid id")
 
 	ErrInvalidPlaylist = errors.New("invalid playlist")
+
+	ErrInvalidPosition = errors.New("invalid position")
+
+	ErrSongNotFound = errors.New("song not found")
 )

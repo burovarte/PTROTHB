@@ -11,7 +11,7 @@ type PlaylistRepository interface {
 	ReadPlaylist(ctx context.Context, id int64) (domain.Playlist, error)
 	UpdatePlaylist(ctx context.Context, playList domain.Playlist) error
 	DeletePlaylist(ctx context.Context, id int64) error
-	AddSongToPlaylist(ctx context.Context, songID int64, playlistID int64, position int64) error
+	AddSongToPlaylist(ctx context.Context, playlistID int64, songID int64, position int64) error
 }
 
 type PlaylistService struct {
@@ -60,4 +60,16 @@ func (p *PlaylistService) DeletePlaylist(ctx context.Context, id int64) error {
 	}
 
 	return p.repo.DeletePlaylist(ctx, id)
+}
+
+func (p *PlaylistService) AddSongToPlaylist(ctx context.Context, playlistID int64, songID int64, position int64) error {
+	if songID <= 0 || playlistID <= 0 {
+		return domain.ErrInvalidID
+	}
+
+	if position <= 0 {
+		return domain.ErrInvalidPosition
+	}
+
+	return p.repo.AddSongToPlaylist(ctx, playlistID, songID, position)
 }
