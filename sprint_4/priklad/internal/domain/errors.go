@@ -22,4 +22,6 @@ var (
 	ErrInvalidPosition = errors.New("invalid position")
 
 	ErrSongNotFound = errors.New("song not found")
+
+	ErrPlaylistNotFound = errors.New("playlist not found")
 )

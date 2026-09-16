@@ -68,3 +68,51 @@ func (r *SongRepository) ReadSong(ctx context.Context, id int64) (domain.Song, e
 
 	return song, nil
 }
+
+func (r *SongRepository) UpdateSong(ctx context.Context, song domain.Song) error {
+	const query = `
+		UPDATE public.song
+		SET name = $1, duration = $2, updated_at = NOW()
+		WHERE id = $3
+	`
+
+	res, err := r.db.ExecContext(ctx, query, song.Name, int64(song.Duration), song.ID)
+
+	if err != nil {
+		return fmt.Errorf("update song: %w", err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get updated row count: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrSongNotFound
+	}
+
+	return nil
+}
+
+func (r *SongRepository) DeleteSong(ctx context.Context, id int64) error {
+	const query = `
+		DELETE FROM public.song
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("delete song: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("get deleted row count: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return domain.ErrSongNotFound
+	}
+
+	return nil
+}
